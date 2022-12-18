@@ -12,7 +12,7 @@
 #
 # Copyright (C) 2010 Igor Tkach
 
-from __future__ import with_statement
+
 
 import logging
 import os
@@ -24,8 +24,8 @@ try:
 except ImportError:
     import simplejson as json
 
-from PyQt4.QtCore import QRect
-from PyQt4.QtGui import QApplication, QMessageBox
+from PyQt5.QtCore import QRect
+from PyQt5.QtWidgets import QApplication, QMessageBox
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ def show_error(msg):
     msg_box.setWindowTitle(_('Error'))
     msg_box.setIcon(QMessageBox.Warning)
     msg_box.setInformativeText(msg)
-    msg_box.setDetailedText(u''.join(traceback.format_exc()))
+    msg_box.setDetailedText(''.join(traceback.format_exc()))
     msg_box.setStandardButtons(QMessageBox.Close)
     msg_box.exec_()
     

@@ -12,36 +12,85 @@
 #
 # Copyright (C) 2010 Igor Tkach
 
-from __future__ import with_statement
+
 import sys
 import os
 import time
 import functools
 import webbrowser
 import logging
-import locale
+from . import locale
 import re
 import traceback
 
 from collections import defaultdict, deque
 
-from PyQt4.QtCore import (QObject, Qt, QThread, QTranslator, QLocale,
+from PyQt5.QtCore import (QObject, Qt, QThread, QTranslator, QLocale,
                           QTimer, QUrl, QVariant, pyqtProperty, pyqtSlot,
                           QSize, QByteArray, QPoint,
-                          pyqtSignal, QString, QEvent)
+                          pyqtSignal, #QString, 
+                          QEvent,
+                          QItemSelectionModel)
 
-from PyQt4.QtGui import (QWidget, QIcon, QPixmap, QFileDialog,
-                         QLineEdit, QHBoxLayout, QVBoxLayout, QAction,
-                         QKeySequence, QMainWindow, QListWidget,
-                         QListWidgetItem, QTabWidget, QApplication,
-                         QGridLayout, QSplitter, QProgressDialog,
-                         QMessageBox, QDialog, QDialogButtonBox, QPushButton,
-                         QTableWidget, QTableWidgetItem, QItemSelectionModel,
-                         QDockWidget, QToolBar, QColor, QLabel,
-                         QColorDialog, QCheckBox, QKeySequence, QPalette,
-                         QMenu, QShortcut, QFontDialog, QFont, QToolButton)
+try:
+    from PyQt5.QtCore import QString
+except ImportError:
+    # we are using Python3 so QString is not defined
+    QString = type("")
 
-from PyQt4.QtWebKit import QWebView, QWebPage, QWebSettings
+# from PyQt5.QtGui import (QWidget, QIcon, QPixmap, QFileDialog,
+                         # QLineEdit, QHBoxLayout, QVBoxLayout, QAction,
+                         # QKeySequence, QMainWindow, QListWidget,
+                         # QListWidgetItem, QTabWidget, QApplication,
+                         # QGridLayout, QSplitter, QProgressDialog,
+                         # QMessageBox, QDialog, QDialogButtonBox, QPushButton,
+                         # QTableWidget, QTableWidgetItem, QItemSelectionModel,
+                         # QDockWidget, QToolBar, QColor, QLabel,
+                         # QColorDialog, QCheckBox, QKeySequence, QPalette,
+                         # QMenu, QShortcut, QFontDialog, QFont, QToolButton)
+from PyQt5.QtWidgets import (QWidget,
+							QFileDialog,
+							QLineEdit,
+							QHBoxLayout, 
+							QVBoxLayout, 
+							QAction,
+							QMainWindow, 
+							QListWidget,
+							QListWidgetItem, 
+							QTabWidget, 
+							QApplication,
+							QGridLayout, 
+							QSplitter, 
+							QProgressDialog,
+							QMessageBox, 
+							QDialog, 
+							QDialogButtonBox, 
+							QPushButton,
+							QTableWidget, 
+							QTableWidgetItem, 
+							QDockWidget, 
+							QToolBar, 
+							QMenu, QShortcut, 
+							QFontDialog,
+							QLabel,
+							QColorDialog, 
+							QToolButton,
+							QCheckBox
+							)
+from PyQt5.QtGui import (QIcon, 
+							QPixmap,
+							QKeySequence, 
+							QPalette,
+							QFont, 
+							QColor
+							)
+
+# from PyQt5.QtWebKit import (QWebView, 
+							# QWebPage, 
+							# QWebSettings)
+from PyQt5.QtWebEngineWidgets import (QWebEngineView as QWebView, 
+							QWebEnginePage as QWebPage, 
+							QWebEngineSettings)
 
 import aarddict
 from aarddict.dictionary import (format_title,
@@ -63,12 +112,14 @@ from aarddict.res import icons
 
 log = logging.getLogger(__name__)
 
-style_tag_re = re.compile(u'<style type="text/css">(.+?)</style>',
+style_tag_re = re.compile('<style type="text/css">(.+?)</style>',
                           re.UNICODE | re.DOTALL)
 http_link_re = re.compile("http[s]?://[^\s\)]+",
                           re.UNICODE)
 max_history = 50
 
+# def QString(x):
+  # return x
 
 def linkify(text):
     return http_link_re.sub(lambda m: '<a href="%(target)s">%(target)s</a>'
@@ -116,7 +167,7 @@ class WebView(QWebView):
         frame = self.page().currentFrame()
 
         hit_test = frame.hitTestContent(point)
-        if unicode(hit_test.linkUrl().toString()):
+        if str(hit_test.linkUrl().toString()):
             context_menu.addAction(self.action_copy_link)
 
         if self.settings().testAttribute(QWebSettings.DeveloperExtrasEnabled):
@@ -149,8 +200,8 @@ class Matcher(QObject):
 
     @pyqtSlot('QString', 'QString', int)
     def match(self, section, candidate, strength):
-        if cmp_words(unicode(section),
-                     unicode(candidate),
+        if cmp_words(str(section),
+                     str(candidate),
                      strength=strength) == 0:
             self._result = True
         else:
@@ -177,7 +228,7 @@ class WordLookupThread(QThread):
         self.stop_requested = False
 
     def run(self):
-        wordstr = unicode(self.word)
+        wordstr = str(self.word)
         log.debug("Looking up %r", wordstr)
         t0 = time.time()
         entries = []
@@ -194,7 +245,7 @@ class WordLookupThread(QThread):
             self.stopped.emit(self.word)
         except Exception:
             self.lookup_failed.emit(self.word,
-                                    u''.join(traceback.format_exc()))
+                                    ''.join(traceback.format_exc()))
         else:
             log.debug('Looked up %r in %ss', wordstr, time.time() - t0)
             self.done.emit(self.word, entries)
@@ -222,7 +273,7 @@ class ArticleLoadThread(QThread):
         except:
             log.exception('Failed to load article for %r', self.view.entry)
             self.article_load_failed.emit(self.view,
-                                          u''.join(traceback.format_exc()))
+                                          ''.join(traceback.format_exc()))
         else:
             self.view.article = article
             self.view.loading = False
@@ -235,11 +286,11 @@ class ArticleLoadThread(QThread):
         t0 = time.time()
         try:
             article = self.dictionaries.read(entry)
-        except ArticleNotFound, e:
+        except ArticleNotFound as e:
             log.debug('Article not found', exc_info=1)
             article = Article(entry,
                               _('Article "%s" not found') % e.entry.title)
-        except TooManyRedirects, e:
+        except TooManyRedirects as e:
             log.debug('Failed to resolve redirect', exc_info=1)
             article = Article(entry,
                               _('Too many redirects for "%s"') % e.entry.title)
@@ -278,7 +329,7 @@ class DictOpenThread(QThread):
                 return
             try:
                 vol = self.dictionaries.add(candidate)
-            except Exception, e:
+            except Exception as e:
                 self.dict_open_failed.emit(candidate, str(e))
             else:
                 self.dict_open_succeded.emit(vol)
@@ -964,9 +1015,9 @@ class DictView(QMainWindow):
 
         self.sources = []
         self.zoom_factor = 1.0
-        self.last_file_parent = u''
-        self.last_dir_parent = u''
-        self.last_save = u''
+        self.last_file_parent = ''
+        self.last_dir_parent = ''
+        self.last_save = ''
 
         self.update_current_article_actions(-1)
         self.scroll_values = LimitedDict()
@@ -1054,7 +1105,7 @@ class DictView(QMainWindow):
         file_names = QFileDialog.getOpenFileNames(self, _('Add Dictionary'),
                                                   self.last_file_parent,
                                                   _('Aard Dictionary Files')+' (*.aar)')
-        file_names = [unicode(name) for name in file_names]
+        file_names = [str(name) for name in file_names]
         if file_names:
             self.last_file_parent = os.path.dirname(file_names[-1])
         return file_names
@@ -1063,7 +1114,7 @@ class DictView(QMainWindow):
         name = QFileDialog.getExistingDirectory (self, _('Add Dictionary Directory'),
                                                       self.last_dir_parent,
                                                       QFileDialog.ShowDirsOnly)
-        dirname = unicode(name)
+        dirname = str(name)
         if dirname:
             self.last_dir_parent = os.path.dirname(dirname)
             return [dirname]
@@ -1107,7 +1158,7 @@ class DictView(QMainWindow):
             for row in reversed(sorted(rows)):
                 item_list.takeItem(row)
             if rows:
-                remaining = [unicode(item_list.item(i).text())
+                remaining = [str(item_list.item(i).text())
                              for i in range(item_list.count())]
                 self.cleanup_sources(remaining)
 
@@ -1184,7 +1235,7 @@ class DictView(QMainWindow):
         loading_item = QListWidgetItem(_('Loading...'))
         loading_item.setFlags(Qt.NoItemFlags)
         self.word_completion.addItem(loading_item)
-        self.tabs.show_loading(_('Looking up <strong>%s</strong>') % unicode(word))
+        self.tabs.show_loading(_('Looking up <strong>%s</strong>') % str(word))
 
         if self.current_lookup_thread:
             self.current_lookup_thread.stop()
@@ -1225,7 +1276,7 @@ class DictView(QMainWindow):
                 items[article_key] = item
             self.word_completion.addItem(item)
 
-        count = range(self.word_completion.count())
+        count = list(range(self.word_completion.count()))
         if count:
             item = self.word_completion.item(0)
             self.word_completion.setCurrentItem(item)
@@ -1234,7 +1285,7 @@ class DictView(QMainWindow):
         else:
             self.tabs.show_nothing(self.windowState() == Qt.WindowFullScreen)
             #add to history if nothing found so that back button works
-            self.add_to_history(unicode(word))
+            self.add_to_history(str(word))
         self.current_lookup_thread = None
 
     def select_next_word(self):
@@ -1262,7 +1313,7 @@ class DictView(QMainWindow):
         self.schedule(func, 200)
 
     def history_selection_changed(self, selected, _deselected):
-        title = unicode(selected.text()) if selected else u''
+        title = str(selected.text()) if selected else ''
         def func():
             self.update_preferred_dicts()
             self.set_word_input(title)
@@ -1277,7 +1328,7 @@ class DictView(QMainWindow):
     def update_shown_article(self, selected):
         self.clear_current_articles()
         if selected:
-            self.add_to_history(unicode(selected.text()))
+            self.add_to_history(str(selected.text()))
             entries = selected.data(Qt.UserRole).toPyObject()
             self.tabs.blockSignals(True)
             view_to_load = None
@@ -1353,7 +1404,7 @@ class DictView(QMainWindow):
 
     def clear_current_articles(self):
         self.tabs.blockSignals(True)
-        for i in reversed(range(self.tabs.count())):
+        for i in reversed(list(range(self.tabs.count()))):
             w = self.tabs.widget(i)
             f = w.page().mainFrame()
             scrollx = f.scrollBarValue(Qt.Horizontal)
@@ -1418,7 +1469,7 @@ class DictView(QMainWindow):
             article_title = current_tab.entry.title
             article_url = volume.article_url
             if article_url:
-                return article_url.replace(u'$1', article_title)
+                return article_url.replace('$1', article_title)
 
     def sort_preferred(self, entries):
         def key(x):
@@ -1439,18 +1490,18 @@ class DictView(QMainWindow):
 
     def link_clicked(self, url):
         log.debug('Link clicked: %r', url)
-        scheme = unicode(url.scheme())
-        path = unicode(url.path())
-        fragment = unicode(url.fragment())
+        scheme = str(url.scheme())
+        path = str(url.path())
+        fragment = str(url.fragment())
         log.debug('scheme: %r, path: %r, frag: %r', scheme, path, fragment)
-        if scheme in (u'http', u'https', u'ftp', u'sftp'):
-            webbrowser.open(unicode(url.toString()))
+        if scheme in ('http', 'https', 'ftp', 'sftp'):
+            webbrowser.open(str(url.toString()))
         else:
             title = '#'.join((path, fragment)) if fragment else path
             if '_' in title:
                 log.debug('Found underscore character in title %r, '
                           'replacing with space', title)
-                title = title.replace(u'_', u' ')
+                title = title.replace('_', ' ')
             if scheme:
                 current_tab = self.tabs.currentWidget()
                 volume_id = current_tab.entry.volume_id
@@ -1507,7 +1558,7 @@ class DictView(QMainWindow):
     def add_to_history(self, title, preferred_dicts=None):
         current_hist_item = self.history_view.currentItem()
         if (not current_hist_item or
-            unicode(current_hist_item.text()) != title):
+            str(current_hist_item.text()) != title):
             self.history_view.blockSignals(True)
             if current_hist_item:
                 while (self.history_view.count() and
@@ -1661,7 +1712,7 @@ class DictView(QMainWindow):
         for dictionary in self.dictionaries:
             dictmap[dictionary.uuid].append(dictionary)
 
-        for uuid, dicts in dictmap.iteritems():
+        for uuid, dicts in dictmap.items():
             text = format_title(dicts[0], with_vol_num=False)
             item = QListWidgetItem(text)
             item.setData(Qt.UserRole, QVariant(uuid))
@@ -1698,14 +1749,14 @@ class DictView(QMainWindow):
                                            (_('Volume'), v.volume, v.file_name))
                                           for v in volumes)
 
-                params = defaultdict(unicode)
+                params = defaultdict(str)
 
                 try:
                     num_of_articles = locale.format('%u', d.article_count, True)
                     num_of_articles = num_of_articles.decode(locale.getpreferredencoding())
                 except:
                     log.warn("Failed to format number of articles")
-                    num_of_articles = unicode(d.article_count)
+                    num_of_articles = str(d.article_count)
 
                 params.update(dict(title=d.title, version=d.version,
                               lbl_total_volumes=_('Volumes:'),
@@ -1887,13 +1938,13 @@ This is text with a footnote reference<a id="_r123" href="#">[1]</a>. <br>
             dialog.reject()
             appearance = dict(style=dict(use_mediawiki_style=res.use_mediawiki_style),
                               colors=res.colors,
-                              fonts=dict(default=unicode(res.font.toString())))
+                              fonts=dict(default=str(res.font.toString())))
             state.write_appearance(appearance)
             style = res.style()
             for i in range(self.tabs.count()):
                 view = self.tabs.widget(i)
                 frame = view.page().currentFrame()
-                html = unicode(frame.toHtml())
+                html = str(frame.toHtml())
                 html = style_tag_re.sub(style, html, count=1)
                 frame.setHtml(html)
 
@@ -1956,7 +2007,7 @@ This is text with a footnote reference<a id="_r123" href="#">[1]</a>. <br>
 
     def update_title(self):
         dict_title = self.create_dict_title()
-        title = u'%s - %s' % (_(aarddict.__appname__), dict_title)
+        title = '%s - %s' % (_(aarddict.__appname__), dict_title)
         self.setWindowTitle(title)
 
     def create_dict_title(self):
@@ -1968,43 +2019,43 @@ This is text with a footnote reference<a id="_r123" href="#">[1]</a>. <br>
         volumestr = volumestr_template % vcount
         dictstr_template = ngettext('%d dictionary', '%d dictionaries', dcount)
         dictstr =  dictstr_template % dcount
-        return u'%s (%s)' % (dictstr, volumestr)
+        return '%s (%s)' % (dictstr, volumestr)
 
     def save_article(self):
         current_tab = self.tabs.currentWidget()
         if current_tab:
             article_title = current_tab.title
             dirname = os.path.dirname(self.last_save)
-            propose_name = os.path.extsep.join((article_title, u'html'))
+            propose_name = os.path.extsep.join((article_title, 'html'))
             file_name = QFileDialog.getSaveFileName(self, _('Save Article'),
                                                     os.path.join(dirname, propose_name),
                                                     _('HTML Documents (*.htm *.html)'))
             if file_name:
-                file_name = unicode(file_name)
+                file_name = str(file_name)
                 self.last_save = file_name
                 try:
                     with open(file_name, 'w') as f:
                         current_frame = current_tab.page().currentFrame()
-                        html = unicode(current_frame.toHtml())
+                        html = str(current_frame.toHtml())
                         f.write(html.encode('utf8'))
-                except Exception, e:
+                except Exception as e:
                     msg_box = QMessageBox(self)
                     msg_box.setWindowTitle(_('Failed to Save Article'))
                     msg_box.setIcon(QMessageBox.Critical)
                     msg_box.setInformativeText(_('There was an error when '
                                                  'writing article to file %s')
                                                % file_name)
-                    msg_box.setDetailedText(unicode(e))
+                    msg_box.setDetailedText(str(e))
                     msg_box.setStandardButtons(QMessageBox.Ok)
                     msg_box.open()
 
     def write_state(self):
         appstate = {}
         history = []
-        for i in reversed(range(self.history_view.count())):
+        for i in reversed(list(range(self.history_view.count()))):
             item = self.history_view.item(i)
             preferred_dicts = item.preferred_dicts
-            history.append([unicode(item.text()), preferred_dicts])
+            history.append([str(item.text()), preferred_dicts])
         appstate['history'] = history
         pos = self._pos
         size = self._size
@@ -2016,7 +2067,7 @@ This is text with a footnote reference<a id="_r123" href="#">[1]</a>. <br>
         appstate['zoom_factor'] = self.zoom_factor
 
         scroll_values = []
-        for entry, value in self.scroll_values.iteritems():
+        for entry, value in self.scroll_values.items():
             scroll_values.append([entry.volume_id, entry.index, value[0], value[1]])
 
         appstate['scroll_values'] = scroll_values
@@ -2050,7 +2101,7 @@ This is text with a footnote reference<a id="_r123" href="#">[1]</a>. <br>
             self.history_view.blockSignals(True)
             self.history_view.setCurrentRow(history_current)
             self.history_view.blockSignals(False)
-            word = unicode(self.history_view.currentItem().text())
+            word = str(self.history_view.currentItem().text())
             self.word_input.setText(word)
             self.update_history_actions(None, None)
 
@@ -2100,6 +2151,6 @@ def main(args, debug=False, dev_extras=False):
         dv.read_state(False)
     dv.show()
     dv.word_input.setFocus()
-    preferred_enc = locale.getpreferredencoding()
+    preferred_enc = 'utf-8'#locale.getpreferredencoding()
     dv.open_dicts(state.read_sources()+[arg.decode(preferred_enc) for arg in args])
     sys.exit(app.exec_())

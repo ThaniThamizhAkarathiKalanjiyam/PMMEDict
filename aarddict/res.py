@@ -12,14 +12,15 @@
 #
 # Copyright (C) 2010 Igor Tkach
 
-from __future__ import with_statement
+
 import os
 import gettext
+#from . import locale
 import locale
 from string import Template # pylint: disable-msg=W0402
 
-from PyQt4.QtCore import QSize
-from PyQt4.QtGui import QIcon, QFont
+from PyQt5.QtCore import QSize
+from PyQt5.QtGui import QIcon, QFont
 
 import aarddict
 from aarddict import package_dir
@@ -28,7 +29,7 @@ from aarddict.state import app_dir
 
 def _read(name):
     with open(name, 'r') as f:
-        return f.read().decode('utf8')
+        return f.read()#.decode('utf8')
 
 locale_dir = os.path.join(package_dir, 'locale')
 
@@ -37,7 +38,7 @@ _article_js = ('<script type="text/javascript">%s</script>' %
 
 user_css_file = os.path.join(app_dir, 'user.css')
 
-_user_style_str = _read(user_css_file) if os.path.exists(user_css_file) else u''
+_user_style_str = _read(user_css_file) if os.path.exists(user_css_file) else ''
 
 _shared_style_str = _read(os.path.join(package_dir, 'shared.css'))
 
@@ -103,13 +104,13 @@ $icons_notice
 </div>
 """)
 
-_redirect_info_tmpl = Template(u"""
+_redirect_info_tmpl = Template("""
 <div id="aard-redirectinfo"">
 $redirect_info
 </div>
 """)
 
-_article_tmpl = Template(u"""<html>
+_article_tmpl = Template("""<html>
     <head>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
         $style
@@ -198,8 +199,10 @@ def _init_gettext():
     gettext_domain = aarddict.__name__
     gettext.bindtextdomain(gettext_domain, locale_dir)
     gettext.textdomain(gettext_domain)
+    # gettext.install(gettext_domain, locale_dir,
+                    # str=True, names=['ngettext'])
     gettext.install(gettext_domain, locale_dir,
-                    unicode=True, names=['ngettext'])
+                    True, names=['ngettext'])
 
 
 def load():
@@ -215,7 +218,7 @@ def _css_font(qfont):
     params = {}
 
     if not qfont.family().isEmpty():
-        params['font_family'] = unicode(qfont.family())
+        params['font_family'] = str(qfont.family())
     else:
         params['font_family'] = 'Sans Serif'
 
@@ -252,7 +255,7 @@ def article(content, redirect):
         redirect_info = _redirect_info_tmpl.substitute(
             dict(redirect_info=_('Redirected from <strong>%s</strong>') % redirect))
     else:
-        redirect_info = u''
+        redirect_info = ''
     return _article_tmpl.substitute(dict(style=style(),
                                         redirect_info=redirect_info,
                                         content=content,

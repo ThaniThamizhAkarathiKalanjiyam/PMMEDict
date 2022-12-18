@@ -9,4 +9,4 @@ import scipy
 import matplotlib
 
 import virtualenv
-import aarddict
+from . import aarddict
